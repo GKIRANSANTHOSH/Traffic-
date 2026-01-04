@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Smart Punishing Traffic Signal</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+
+<style>
+body{
+margin:0;
+font-family:Segoe UI;
+color:white;
+background:url("https://image2url.com/r2/default/images/1766929869850-e8b43e13-bde9-4ab9-aab2-12cdc75d477d.jpeg") center/cover fixed;
+}
+.overlay{
+min-height:100vh;
+background:rgba(0,0,0,.6);
+backdrop-filter:blur(3px);
+padding:30px;
+}
+.header{text-align:center;font-size:2.3em;font-weight:800;}
+
+.main{
+display:flex;
+justify-content:space-around;
+align-items:center;
+flex-wrap:wrap;
+margin-top:40px;
+gap:30px;
+}
+
+/* Car Panel */
+.carPanel{
+background:rgba(255,255,255,.15);
+backdrop-filter:blur(8px);
+padding:20px;
+border-radius:25px;
+text-align:center;
+width:260px;
+box-shadow:0 0 30px #000;
+}
+.carPanel img{
+width:100%;
+border-radius:15px;
+margin-bottom:10px;
+}
+#plate{font-size:1.4em;font-weight:700;}
+#warn{color:#ff4d4d;font-weight:800;font-size:1.2em;}
+
+/* Signal */
+.signal{
+background:#111;
+padding:30px;
+border-radius:30px;
+box-shadow:0 0 40px #000;
+text-align:center;
+}
+.light{
+width:90px;height:90px;border-radius:50%;
+margin:15px auto;background:#333;opacity:.2;
+}
+.red{background:#ff3b3b;}
+.yellow{background:#ffd93d;}
+.green{background:#2ed573;}
+.on{opacity:1;box-shadow:0 0 30px currentColor;}
+#timer{font-size:3em;margin-top:15px;}
+
+/* Meter */
+.meter{
+background:rgba(255,255,255,.15);
+backdrop-filter:blur(8px);
+padding:25px;
+border-radius:25px;
+text-align:center;
+min-width:300px;
+}
+.bar{
+height:25px;background:#000;
+border-radius:20px;overflow:hidden;margin:15px 0;
+}
+.fill{
+height:100%;width:0;
+background:linear-gradient(90deg,#2ed573,#f1c40f,#ff4757);
+}
+#db{font-size:2.5em;}
+button{
+padding:10px 20px;
+font-size:1em;
+border:none;
+border-radius:15px;
+cursor:pointer;
+}
+
+/* Reminder */
+.reminder{
+background:rgba(255,0,0,.15);
+border:2px solid red;
+padding:20px;
+border-radius:20px;
+width:260px;
+text-align:center;
+min-height:140px;
+font-weight:700;
+}
+</style>
+</head>
+
+<body>
+<div class="overlay">
+<div class="header">🚦 Smart Punishing Traffic Signal</div>
+
+<div class="main">
+
+<!-- Car Panel -->
+<div class="carPanel">
+<h3>🚗 Vehicle Monitor</h3>
+<img id="carImg" .alt="Car Image">
+<div id="plate">Vehicle No: ----</div>
+<div id="warn">Waiting...</div>
+</div>
+
+<!-- Signal -->
+<div class="signal">
+<div id="r" class="light red on"></div>
+<div id="y" class="light yellow"></div>
+<div id="g" class="light green"></div>
+<div id="timer">60</div>
+</div>
+
+<!-- Meter -->
+<div class="meter">
+<h3>Decibel Meter (Limit 90 dB)</h3>
+<div id="db">-- dB</div>
+<div class="bar"><div id="fill" class="fill"></div></div>
+<button id="startBtn" onclick="start()">Start Signal</button>
+</div>
+
+<!-- Reminder -->
+<div class="reminder" id="rem">
+🔕 Keep Silence to get Green Signal
+</div>
+
+</div>
+</div>
+
+<script>
+let time = 60, run = false, t;
+let audioCtx;
+
+const r = document.getElementById("r");
+const y = document.getElementById("y");
+const g = document.getElementById("g");
+const dbEl = document.getElementById("db");
+const fill = document.getElementById("fill");
+const rem = document.getElementById("rem");
+
+function lights(c){
+[r,y,g].forEach(l=>l.classList.remove("on"));
+c.classList.add("on");
+}
+
+function start(){
+if(run) return;
+run = true;
+time = 60;
+document.getElementById("startBtn").disabled = true;
+
+audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+audioCtx.resume();
+
+navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{
+
+const src = audioCtx.createMediaStreamSource(stream);
+const an = audioCtx.createAnalyser();
+src.connect(an);
+
+const data = new Uint8Array(an.fftSize);
+
+t = setInterval(()=>{
+
+an.getByteTimeDomainData(data);
+let sum = 0;
+for(let i=0;i<data.length;i++){
+let v = (data[i]-128)/128;
+sum += v*v;
+}
+
+let rms = Math.sqrt(sum/data.length);
+let db = Math.round(20*Math.log10(rms*10000));
+
+dbEl.innerText = db + " dB";
+fill.style.width = Math.min(db,100) + "%";
+
+if(db > 90){
+time = 60;
+rem.innerText = "🚨 Noise Detected! Timer Reset!\n You are making  too noise!\n Vehicle is challend";
+
+
+document.getElementById("carImg").src = "https://image2url.com/r2/default/images/1767511876912-6993f157-9cea-456a-8137-269f8582d09a.png";
+document.getElementById("plate").innerText="Vehicle No: TS09 AB 2345";
+document.getElementById("warn").innerText = "⚠️ HONKING WARNING!";
+}else{
+document.getElementById("warn").innerText = "✔ Vehicles Behaving";
+rem.innerText = "🟢 Silence is Good";
+}
+
+if(time > 30) lights(r);
+else if(time > 10) lights(y);
+else lights(g);
+
+document.getElementById("timer").innerText = time;
+
+if(time > 0) time--;
+else{
+clearInterval(t);
+run = false;
+rem.innerText = "🎉 YOU MAY GO NOW!";
+}
+
+},1000);
+
+});
+}
+</script>
+</body>
+</html>
+
